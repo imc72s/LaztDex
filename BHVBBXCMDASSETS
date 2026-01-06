@@ -1,0 +1,120 @@
+
+local Players = game:GetService("Players")
+local Chat = game:GetService("Chat")
+local TextChatService = game:GetService("TextChatService")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- ใส่ชื่อ Username ของคนสั่ง (ไอดีหลักของคุณ)
+local TARGET_NAME = "4Q4II" 
+
+local RESPONSE_TEXT = "ACTIVE +"
+
+-- ฟังก์ชันตอบกลับ (Bubble Chat)
+local function sendResponse()
+    local char = LocalPlayer.Character
+    local head = char and char:FindFirstChild("Head")
+    if head then
+        Chat:Chat(head, RESPONSE_TEXT, Enum.ChatColor.White)
+    end
+end
+
+-- ฟังก์ชันประมวลผลคำสั่ง
+local function processChat(player, message)
+    if not player or not message then return end
+    
+    -- ตรวจสอบว่าเป็นคนสั่งไหม
+    if string.lower(player.Name) ~= string.lower(TARGET_NAME) and string.lower(player.DisplayName) ~= string.lower(TARGET_NAME) then 
+        return 
+    end
+    
+    local msg = string.lower(message)
+    local args = string.split(message, " ") -- ใช้ message จริงเพื่อเอา Text สำหรับตั้งชื่อ
+    local cmd = string.lower(args[1] or "")
+    local targetInput = string.lower(args[2] or "")
+    
+    local myName = string.lower(LocalPlayer.Name)
+    local isTarget = (targetInput == "*" or (targetInput ~= "" and string.find(myName, targetInput)))
+
+    if not isTarget and cmd ~= "!log" then return end
+
+    -- 1. !kick [ชื่อย่อ/*]
+    if cmd == "!kick" then
+        LocalPlayer:Kick("\nKICK!")
+
+    -- 2. !log
+    elseif cmd == "!log" then
+        sendResponse()
+
+    -- 3. !bring [ชื่อย่อ/*]
+    elseif cmd == "!bring" then
+        local char = LocalPlayer.Character
+        local targetChar = player.Character
+        if char and targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+            char:MoveTo(targetChar.HumanoidRootPart.Position + Vector3.new(0, 2, 0))
+        end
+
+    -- 4. !kill [ชื่อย่อ/*]
+    elseif cmd == "!kill" then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.Health = 0
+        end
+
+    -- 5. !rejoin [ชื่อย่อ/*]
+    elseif cmd == "!rejoin" then
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+
+    -- 6. !serverhop [ชื่อย่อ/*]
+    elseif cmd == "!serverhop" then
+        -- หาเซิร์ฟเวอร์อื่นแล้วย้ายไป
+        pcall(function()
+            local HttpService = game:GetService("HttpService")
+            local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100")).data
+            for _, s in ipairs(servers) do
+                if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                    break
+                end
+            end
+        end)
+
+    -- 7. !name [ชื่อย่อ/*] [ข้อความ]
+    elseif cmd == "!name" then
+        local nameText = table.concat(args, " ", 3) -- เอาข้อความตั้งแต่คำที่ 3 เป็นต้นไป
+        if nameText ~= "" then
+            local remote = ReplicatedStorage:FindFirstChild("RE") and ReplicatedStorage.RE:FindFirstChild("1RPNam1eTex1t")
+            if remote then
+                remote:FireServer("RolePlayName", nameText)
+            end
+        end
+    end
+end
+
+-- ซ่อนแชทตัวเอง (เฉพาะ ACTIVE +)
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+    TextChatService.OnIncomingMessage = function(message)
+        if message.Text == RESPONSE_TEXT and message.TextSource and message.TextSource.UserId == LocalPlayer.UserId then
+            local props = Instance.new("TextChatMessageProperties")
+            props.Text = "" 
+            return props
+        end
+    end
+end
+
+-- เชื่อมต่อระบบแชท
+local function setup(p)
+    p.Chatted:Connect(function(m) processChat(p, m) end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do setup(p) end
+Players.PlayerAdded:Connect(setup)
+
+TextChatService.MessageReceived:Connect(function(textMsg)
+    if textMsg.TextSource then
+        local p = Players:GetPlayerByUserId(textMsg.TextSource.UserId)
+        processChat(p, textMsg.Text)
+    end
+end)
+
